@@ -267,13 +267,302 @@ class RowWidget:
 
 
 # ==========================================
+# TAB 3: Full .BIN File Editor
+# ==========================================
+class BinEditorTab:
+    def __init__(self, parent):
+        self.parent = parent
+        self.current_filepath = None
+        self.original_flags = [] 
+        
+        # 1. Self-contained mappings
+        self.char_map = {
+            '0': '30', '1': '31', '2': '32', '3': '33', '4': '34', '5': '35', '6': '36', '7': '37', '8': '38', '9': '39',
+            ' ': '3A', '!': '3B', '"': '3C', '#': '3D', '$': '3E', '%': '3F', '&': '40', "'": '41', '(': '42', ')': '43',
+            '*': '44', '+': '45', ',': '46', '-': '47', '.': '48', '/': '49', ':': '4A', ';': '4B', '<': '4C', '=': '4D',
+            '>': '4E', '?': '4F', '@': '00', 
+            'A': '50', 'B': '51', 'C': '52', 'D': '53', 'E': '54', 'F': '55', 'G': '56', 'H': '57', 'I': '58', 'J': '59',
+            'K': '5A', 'L': '5B', 'M': '5C', 'N': '5D', 'O': '5E', 'P': '5F', 'Q': '60', 'R': '61', 'S': '62', 'T': '63',
+            'U': '64', 'V': '65', 'W': '66', 'X': '67', 'Y': '68', 'Z': '69',
+            '[': '6A', '\\': '6B', ']': '6C', '^': '6D', '_': '6E', '‘': '6F',
+            'a': '70', 'b': '71', 'c': '72', 'd': '73', 'e': '74', 'f': '75', 'g': '76', 'h': '77', 'i': '78', 'j': '79',
+            'k': '7A', 'l': '7B', 'm': '7C', 'n': '7D', 'o': '7E', 'p': '7F', 'q': '80', 'r': '81', 's': '82', 't': '83',
+            'u': '84', 'v': '85', 'w': '86', 'x': '87', 'y': '88', 'z': '89',
+            '{': '8A', '|': '8B', '}': '8C', '~': '8D', '·': '8E', '【': '8F', '】': '90',
+            '♪': '91', '♥': '92', 'Œ': '93', '“': '94', '”': '95', '—': '96', 'œ': '97', '¡': '98',
+            '↑': '99', '↓': '9A', '←': '9B', '→': '9C', '¨': '9D', '«': '9E', '°': '9F', 
+            '»': 'A1', '¿': 'A2',
+            'À': 'A3', 'Á': 'A4', 'Â': 'A5', 'Ä': 'A6', 'Ç': 'A7', 'È': 'A8', 'É': 'A9', 'Ê': 'AA', 'Ë': 'AB',
+            'Ì': 'AC', 'Í': 'AD', 'Î': 'AE', 'Ï': 'AF', 'Ñ': 'B0', 'Ò': 'B1', 'Ó': 'B2', 'Ô': 'B3', 'Ö': 'B4',
+            'Ù': 'B5', 'Ú': 'B6', 'Û': 'B7', 'Ü': 'B8', 'ß': 'B9',
+            'à': 'BA', 'á': 'BB', 'â': 'BC', 'ä': 'BD', 'ç': 'BE', 'è': 'BF', 'é': 'C0', 'ê': 'C1', 'ë': 'C2',
+            'ì': 'C3', 'í': 'C4', 'î': 'C5', 'ï': 'C6', 'ñ': 'C7', 'ò': 'C8', 'ó': 'C9', 'ô': 'CA', 'ö': 'CB',
+            'ù': 'CC', 'ú': 'CD', 'û': 'CE', 'ü': 'CF',
+            'ƒ': 'D1', '„': 'D2', '…': 'D3', '’': 'D5', '™': 'D9', '›': 'DB', '§': 'DC', '©': 'DD', 'ᵃ': 'DE',
+            '®': 'DF', '±': 'E0', '²': 'E1', '³': 'E2', '¼': 'E3', '½': 'E4', '¾': 'E5', '×': 'E6', '÷': 'E7',
+            '‹': 'E8', '⋯': 'E9', 'ă': 'EB', '★': 'EC', '☆': 'ED', '■': 'EE', '∞': 'EF', '□': 'F0', '℠': 'F1'
+        }
+        self.color_map = {
+            '{WHITE}': '0A 41', '{YELLOW}': '0A 43', '{GREY}': '0A 52', '{BLUE}': '0A 88',
+            '{RED}': '0A 94', '{PINK}': '0A 97', '{PURPLE}': '0A A1', '{CYAN}': '0A B1'
+        }
+        
+        self.hex_to_char = {v.replace(' ', ''): k for k, v in self.char_map.items()}
+        self.hex_to_color = {v.replace(' ', ''): k for k, v in self.color_map.items()}
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Match Tab 1 Main Container styling
+        self.main_container = tk.Frame(self.parent, bg="#d9d9d9")
+        self.main_container.pack(fill="both", expand=True, padx=OUTER_MARGIN, pady=OUTER_MARGIN)
+
+        # 1. TOP NAV
+        nav_frame = tk.Frame(self.main_container, bg="#333", pady=10, padx=10)
+        nav_frame.pack(fill="x")
+        
+        tk.Label(nav_frame, text="FILE OPS:", bg="#333", fg="#aaa", font=("Arial", 10, "bold")).pack(side="left", padx=(0, 15))
+        
+        tk.Button(nav_frame, text="LOAD .BIN", command=self.load_bin, font=("Arial", 10, "bold"), width=15, relief="flat", pady=5, bg="#e1e1e1").pack(side="left", padx=2)
+        
+        self.lbl_file = tk.Label(nav_frame, text="No file loaded", bg="#333", fg="#aaa", font=("Arial", 9, "italic"))
+        self.lbl_file.pack(side="left", padx=15)
+        
+        # Matches Tab 2's red toggle button styling to maintain aesthetics 
+        tk.Button(nav_frame, text="SAVE .BIN", command=self.save_bin, font=("Arial", 10, "bold"), width=15, relief="flat", pady=5, bg="#27ae60", fg="white").pack(side="right", padx=2)
+
+        # 2. HEADER INFO
+        header_frame = tk.Frame(self.main_container, bg="#e0e0e0", pady=4)
+        header_frame.pack(fill="x", padx=0, pady=(15, 0))
+        tk.Label(header_frame, text="DIALOGUE LINES (4-COLUMN SPREAD)", bg="#e0e0e0", font=("Arial", 8, "bold")).pack(side="left", padx=10)
+
+        # 3. TREEVIEW CONTAINER
+        container_border = tk.Frame(self.main_container, bg="#888", bd=1)
+        container_border.pack(fill="both", expand=True)
+        
+        grid_frame = tk.Frame(container_border, bg="#f0f0f0")
+        grid_frame.pack(fill="both", expand=True)
+        
+        # Setup 4-Column Text Display + AE Index
+        columns = ("Index", "Line 1", "Line 2", "Line 3", "Line 4", "Line 5")
+        self.tree = ttk.Treeview(grid_frame, columns=columns, show="headings", height=15)
+        
+        self.tree.heading("Index", text="Index")
+        self.tree.heading("Line 1", text="Line 1")
+        self.tree.heading("Line 2", text="Line 2")
+        self.tree.heading("Line 3", text="Line 3")
+        self.tree.heading("Line 4", text="Line 4")
+        self.tree.heading("Line 5", text="Line 5")
+        
+        self.tree.column("Index", width=70, anchor="center")
+        self.tree.column("Line 1", width=150)
+        self.tree.column("Line 2", width=270)
+        self.tree.column("Line 3", width=270)
+        self.tree.column("Line 4", width=270)
+        self.tree.column("Line 5", width=270)
+        
+        scrollbar = ttk.Scrollbar(grid_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        self.tree.bind("<<TreeviewSelect>>", self.on_row_select)
+
+        # 4. EDITOR AREA HEADER
+        edit_header = tk.Frame(self.main_container, bg="#e0e0e0", pady=4)
+        edit_header.pack(fill="x", padx=0, pady=(15, 0))
+        tk.Label(edit_header, text="EDIT / ADD DIALOGUE", bg="#e0e0e0", font=("Arial", 8, "bold")).pack(side="left", padx=10)
+
+        # 5. EDITOR CONTAINER
+        edit_border = tk.Frame(self.main_container, bg="#888", bd=1)
+        edit_border.pack(fill="x")
+        
+        edit_frame = tk.Frame(edit_border, bg="#f0f0f0", padx=10, pady=10)
+        edit_frame.pack(fill="x")
+        
+        self.text_editor = tk.Text(edit_frame, height=4, font=("Consolas", 11), relief="flat")
+        self.text_editor.pack(fill="x", pady=5)
+        
+        # Toolbar
+        toolbar = tk.Frame(edit_frame, bg="#f0f0f0")
+        toolbar.pack(fill="x", pady=5)
+        
+        colors = ['{WHITE}', '{YELLOW}', '{GREY}', '{BLUE}', '{RED}', '{PINK}', '{PURPLE}', '{CYAN}']
+        for c in colors:
+            tk.Button(toolbar, text=c.strip('{}'), command=lambda tag=c: self.insert_tag(tag), bg="#e1e1e1", relief="flat").pack(side="left", padx=1)
+            
+        tk.Label(toolbar, text=" | ", bg="#f0f0f0", fg="#888").pack(side="left")
+        
+        special_chars = ['★', '♥','☆','■', '♪', '∞', '™', '©', '®', '↑', '↓', '←', '→', '\n']
+        for char in special_chars:
+            display = "NEW LINE" if char == '\n' else char
+            tk.Button(toolbar, text=display, command=lambda t=char: self.insert_tag(t), bg="#e1e1e1", relief="flat").pack(side="left", padx=1)
+
+        # Action Buttons (Matched to Tab 1 styling)
+        action_frame = tk.Frame(edit_frame, bg="#f0f0f0")
+        action_frame.pack(fill="x", pady=(10, 0))
+        
+        tk.Button(action_frame, text="Update Selected Line", command=self.update_line, bg="#007acc", fg="white", font=("Arial", 9, "bold"), relief="flat", width=20, pady=5).pack(side="left", padx=5)
+        tk.Button(action_frame, text="Add As New Line", command=self.add_new_line, bg="#444", fg="white", font=("Arial", 9, "bold"), relief="flat", width=20, pady=5).pack(side="left", padx=5)
+        tk.Button(action_frame, text="Delete Selected Line", command=self.delete_line, bg="#666", fg="white", font=("Arial", 9, "bold"), relief="flat", width=20, pady=5).pack(side="left", padx=5)
+
+
+    # --- Methods ---
+    def insert_tag(self, tag): 
+        self.text_editor.insert("insert", tag)
+
+    def on_row_select(self, event):
+        selected = self.tree.selection()
+        if not selected: return
+        
+        # Pull text from lines 1-5 and reconstruct
+        vals = self.tree.item(selected[0])['values']
+        lines = [str(x) for x in vals[1:6]] # <--- CHANGED HERE
+        
+        # Remove trailing empty lines so we don't accidentally encode extra newlines
+        while lines and not lines[-1].strip():
+            lines.pop()
+            
+        full_text = "\n".join(lines)
+        self.text_editor.delete("1.0", "end")
+        self.text_editor.insert("1.0", full_text)
+
+    def update_line(self):
+        selected = self.tree.selection()
+        if not selected: return messagebox.showwarning("Warning", "Select a line to update.")
+        
+        txt = self.text_editor.get("1.0", "end-1c")
+        lines = txt.split('\n')
+        while len(lines) < 4: lines.append("")
+        
+        idx_str = self.tree.item(selected[0])['values'][0]
+        self.tree.item(selected[0], values=(idx_str, lines[0], lines[1], lines[2], lines[3]))
+
+    def add_new_line(self):
+        txt = self.text_editor.get("1.0", "end-1c")
+        if txt:
+            lines = txt.split('\n')
+            while len(lines) < 4: lines.append("")
+            
+            idx_val = len(self.tree.get_children())
+            idx_str = f"AE{struct.pack('<H', idx_val).hex().upper()}"
+            
+            self.tree.insert("", "end", values=(idx_str, lines[0], lines[1], lines[2], lines[3]))
+            self.text_editor.delete("1.0", "end")
+
+    def delete_line(self):
+        selected = self.tree.selection()
+        if selected:
+            self.tree.delete(selected[0])
+            
+            # Re-index all remaining lines
+            for i, child in enumerate(self.tree.get_children()):
+                idx_str = f"AE{struct.pack('<H', i).hex().upper()}"
+                old_vals = self.tree.item(child, 'values')
+                self.tree.item(child, values=(idx_str, old_vals[1], old_vals[2], old_vals[3], old_vals[4]))
+
+    def decode_hex_to_text(self, hex_string):
+        hex_string = hex_string.upper()
+        result = ""
+        i = 0
+        while i < len(hex_string):
+            if i + 4 <= len(hex_string) and hex_string[i:i+4] in self.hex_to_color:
+                result += self.hex_to_color[hex_string[i:i+4]]
+                i += 4
+                continue
+            if i + 2 <= len(hex_string):
+                chunk_2 = hex_string[i:i+2]
+                if chunk_2 == "03": result += "\n"
+                elif chunk_2 in self.hex_to_char: result += self.hex_to_char[chunk_2]
+                else: result += f"[{chunk_2}]"
+                i += 2
+            else: break
+        return result
+
+    def encode_text_to_bytes(self, text):
+        hex_output = ""
+        tokens = re.findall(r'\{[A-Z]+\}|.', text, re.DOTALL)
+        for token in tokens:
+            if token in self.color_map: hex_output += self.color_map[token].replace(' ', '')
+            elif token == '\n': hex_output += '03'
+            elif token in self.char_map: hex_output += self.char_map[token].replace(' ', '')
+        return bytes.fromhex(hex_output + "00")
+
+    def load_bin(self):
+        """Manual load triggered by the button."""
+        filepath = filedialog.askopenfilename(filetypes=[("BIN Files", "*.bin")])
+        if not filepath: return
+        self.load_bin_from_path(filepath)
+
+    def load_bin_from_path(self, filepath):
+        """Core loading logic that can run silently in the background."""
+        if not os.path.exists(filepath): return
+        
+        self.current_filepath = filepath
+        self.lbl_file.config(text=os.path.basename(filepath), fg="white")
+        for item in self.tree.get_children(): self.tree.delete(item)
+        self.original_flags = []
+        
+        with open(filepath, 'rb') as f: file_data = f.read()
+        if not file_data: return
+        
+        data_start_offset = struct.unpack('<I', file_data[0:4])[0] & ~0x00800000
+        ptr_section = file_data[:data_start_offset]
+        data_section = file_data[data_start_offset:]
+
+        offsets = []
+        for i in range(0, len(ptr_section), 8):
+            ptr_val = struct.unpack('<I', ptr_section[i:i+4])[0]
+            self.original_flags.append(ptr_val & 0x00800000)
+            offsets.append(ptr_val & ~0x00800000)
+
+        for i, offset in enumerate(offsets):
+            start = offset - data_start_offset
+            end = offsets[i+1] - data_start_offset if i + 1 < len(offsets) else len(data_section)
+            clean_hex = data_section[start:end].hex().upper().rstrip("00")
+            
+            # Split into 4 lines for columns
+            decoded_text = self.decode_hex_to_text(clean_hex)
+            lines = decoded_text.split('\n')
+            while len(lines) < 4: lines.append("")
+            
+            idx_str = f"AE{struct.pack('<H', i).hex().upper()}"
+            self.tree.insert("", "end", values=(idx_str, lines[0], lines[1], lines[2], lines[3]))
+
+    def save_bin(self):
+        if not self.current_filepath: return messagebox.showerror("Error", "No file loaded.")
+        
+        byte_lines = []
+        for c in self.tree.get_children():
+            vals = self.tree.item(c, 'values')
+            lines = [str(x) for x in vals[1:5]]
+            while lines and not lines[-1].strip():
+                lines.pop()
+            full_text = "\n".join(lines)
+            byte_lines.append(self.encode_text_to_bytes(full_text))
+        
+        current_data_offset = len(byte_lines) * 8
+        new_pointers, new_data = bytearray(), bytearray()
+
+        for i, b_line in enumerate(byte_lines):
+            flag = self.original_flags[i] if i < len(self.original_flags) else 0x00800000
+            new_pointers.extend(struct.pack('<I', current_data_offset | flag) * 2)
+            new_data.extend(b_line)
+            current_data_offset += len(b_line)
+
+        try:
+            with open(self.current_filepath, 'wb') as f: f.write(new_pointers + new_data)
+            messagebox.showinfo("Success", f"Rebuilt {os.path.basename(self.current_filepath)}!")
+        except Exception as e: messagebox.showerror("Error", f"Failed to save:\n{e}")
+
+        
+# ==========================================
 #               MAIN APPLICATION
 # ==========================================
 
 class DataEntryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Unified Tool: Editor & Camera")
+        self.root.title("FFX Director 2.0")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         
         # --- STORAGE INIT ---
@@ -323,8 +612,15 @@ class DataEntryApp:
         self.notebook.add(self.tab_editor, text="Worker Editor")
 
         # Tab 2: Camera
-        self.tab_camera = tk.Frame(self.notebook, bg="#d9d9d9") # Matches Tab 1 bg
+        self.tab_camera = tk.Frame(self.notebook, bg="#d9d9d9")
         self.notebook.add(self.tab_camera, text="Camera Operations")
+
+        # Tab 3: Bin File Editor (NEW)
+        self.tab_bin = tk.Frame(self.notebook, bg="#d9d9d9")
+        self.notebook.add(self.tab_bin, text="Dialogue Editor")
+        
+        # Instantiate the new Bin Editor class and attach it to Tab 3
+        self.bin_editor_app = BinEditorTab(self.tab_bin)
 
         # Bind tab change event to update thread-safe tracker and auto-disable camera
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
@@ -857,7 +1153,6 @@ class DataEntryApp:
     # ==========================================
     #           SHARED / EDITOR UTILS
     # ==========================================
-    # (These methods remain largely unchanged from CODE 1 but are now part of the class)
     
     def _ensure_directories(self):
         os.makedirs(WORKER_DIR, exist_ok=True)
@@ -1012,6 +1307,45 @@ class DataEntryApp:
             display_name = os.path.basename(filename)
             if len(display_name) > 25: display_name = display_name[:22] + "..."
             self.master_file_label.config(text=display_name, fg="#000")
+            
+            # Trigger the background .bin search & load
+            self._auto_load_linked_bin(filename)
+
+    def _auto_load_linked_bin(self, ebp_filepath):
+        """Searches backwards for the 'master' folder, then deep scans for the matching .bin"""
+        # 1. Get the base name (e.g. "klyt0100" from "klyt0100.ebp")
+        base_name = os.path.splitext(os.path.basename(ebp_filepath))[0]
+        target_bin_name = base_name + ".bin"
+        
+        # 2. Recurse backwards to find the 1st parent folder named 'master'
+        path_parts = os.path.normpath(ebp_filepath).split(os.sep)
+        master_dir = None
+        
+        for i in range(len(path_parts) - 1, -1, -1):
+            if path_parts[i].lower() == 'master':
+                # Reconstruct the path up to and including the 'master' folder
+                master_dir = os.sep.join(path_parts[:i+1])
+                # Handle root drive formatting edge-case (e.g., C: -> C:\)
+                if not master_dir.endswith(os.sep) and len(master_dir) == 2 and master_dir[1] == ':':
+                    master_dir += os.sep
+                break
+                
+        if not master_dir or not os.path.exists(master_dir):
+            return  # The 'master' directory wasn't found in the path hierarchy
+            
+        # 3. Scan all folders/subfolders within 'master' for the target .bin
+        found_bin_path = None
+        for root_dir, dirs, files in os.walk(master_dir):
+            if target_bin_name in files:
+                found_bin_path = os.path.join(root_dir, target_bin_name)
+                break 
+                
+        # 4. If the .bin file is found, automatically load it into Tab 3
+        if found_bin_path:
+            try:
+                self.bin_editor_app.load_bin_from_path(found_bin_path)
+            except Exception as e:
+                print(f"Background bin load failed: {e}")
 
     def save_worker(self):
         self.save_current_field_data()
