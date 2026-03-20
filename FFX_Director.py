@@ -355,11 +355,11 @@ class BinEditorTab:
         self.tree.heading("Line 5", text="Line 5")
         
         self.tree.column("Index", width=70, anchor="center")
-        self.tree.column("Line 1", width=150)
-        self.tree.column("Line 2", width=270)
-        self.tree.column("Line 3", width=270)
-        self.tree.column("Line 4", width=270)
-        self.tree.column("Line 5", width=270)
+        self.tree.column("Line 1", width=250)
+        self.tree.column("Line 2", width=250)
+        self.tree.column("Line 3", width=250)
+        self.tree.column("Line 4", width=250)
+        self.tree.column("Line 5", width=250)
         
         scrollbar = ttk.Scrollbar(grid_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
