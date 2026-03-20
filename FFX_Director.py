@@ -267,7 +267,7 @@ class RowWidget:
 
 
 # ==========================================
-#             MAIN APPLICATION
+#               MAIN APPLICATION
 # ==========================================
 
 class DataEntryApp:
@@ -304,19 +304,19 @@ class DataEntryApp:
         self.vel_x, self.vel_y, self.vel_z = 0.0, 0.0, 0.0
         self.current_yaw, self.current_pitch = 0.0, 0.0
         self.target_yaw, self.target_pitch = 0.0, 0.0
+        
+        # Input State Tracking
         self.left_click_last_state = False
+        self.right_click_last_state = False  
+        
         self._setup_screen_center()
-
-        # --- KEYBOARD HOOKS FOR CAMERA ---
-        # We add these globally so they work even if focus is on the game
-        keyboard.add_hotkey('9', lambda: self.toggle_camera_mode('standard'))
-        keyboard.add_hotkey('0', lambda: self.toggle_camera_mode('directional'))
-        keyboard.add_hotkey('-', self.disable_camera)
-        keyboard.add_hotkey('end', self.disable_camera)
 
         # --- TABS SETUP ---
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True)
+
+        # Thread-safe tab tracking for keyboard hooks
+        self.current_tab_index = 0
 
         # Tab 1: Editor
         self.tab_editor = tk.Frame(self.notebook, bg="#d9d9d9")
@@ -326,9 +326,29 @@ class DataEntryApp:
         self.tab_camera = tk.Frame(self.notebook, bg="#d9d9d9") # Matches Tab 1 bg
         self.notebook.add(self.tab_camera, text="Camera Operations")
 
+        # Bind tab change event to update thread-safe tracker and auto-disable camera
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+        # --- KEYBOARD HOOKS FOR CAMERA ---
+        # Hotkeys check self.current_tab_index to ensure they only run on Tab 1
+        keyboard.add_hotkey('9', lambda: self.toggle_camera_mode('standard') if self.current_tab_index == 1 else None)
+        keyboard.add_hotkey('0', lambda: self.toggle_camera_mode('directional') if self.current_tab_index == 1 else None)
+        keyboard.add_hotkey('-', lambda: self.disable_camera() if self.current_tab_index == 1 else None)
+        keyboard.add_hotkey('end', lambda: self.disable_camera() if self.current_tab_index == 1 else None)
+
         # --- BUILD INTERFACES ---
         self._build_editor_tab()
         self._build_camera_tab()
+
+        # --- START BACKGROUND POLLING ---
+        self._background_mouse_poll()
+
+    def _on_tab_changed(self, event):
+        """Updates tab index tracking and auto-disables camera when switching to Editor."""
+        self.current_tab_index = self.notebook.index("current")
+        # If user switches back to Editor while camera is active, disable it safely
+        if self.current_tab_index == 0 and self.freecam_enabled:
+            self.disable_camera()
 
     # ==========================================
     #           TAB 1: EDITOR BUILD
@@ -455,7 +475,7 @@ class DataEntryApp:
         self.lbl_cam_status = tk.Label(header_frame, text="INACTIVE", bg="#e0e0e0", fg="#555", font=("Arial", 9, "bold"))
         self.lbl_cam_status.pack(side="left")
         
-        tk.Label(header_frame, text="LOG OUTPUT (Left Click to Capture)", bg="#e0e0e0", font=("Arial", 8, "bold")).pack(side="right", padx=(0,10))
+        tk.Label(header_frame, text="LOG OUTPUT (L-Click Cam, R-Click Char)", bg="#e0e0e0", font=("Arial", 8, "bold")).pack(side="right", padx=(0,10))
 
         # 3. CONTENT AREA (Text Box styled like Entry)
         container_border = tk.Frame(self.cam_main_container, bg="#888", bd=1)
@@ -488,6 +508,21 @@ class DataEntryApp:
     # ==========================================
     #           CAMERA LOGIC IMPLEMENTATION
     # ==========================================
+
+    def _background_mouse_poll(self):
+        """Runs continuously to check for right-clicks when on the camera tab, independent of freecam status."""
+        if self.current_tab_index == 1:
+            try:
+                if mouse.is_pressed('right'):
+                    if not self.right_click_last_state:
+                        self._log_char_pos_standalone()
+                    self.right_click_last_state = True
+                else:
+                    self.right_click_last_state = False
+            except Exception:
+                pass
+        # Check again in 20ms
+        self.root.after(20, self._background_mouse_poll)
     
     def _setup_screen_center(self):
         user32 = ctypes.windll.user32
@@ -508,12 +543,15 @@ class DataEntryApp:
                 "target_y": self.game_module + CAMERA_TARGET_OFFSET + 4,
                 "target_z": self.game_module + CAMERA_TARGET_OFFSET + 8,
                 "screen_depth": self.game_module + SCREEN_DEPTH_OFFSET,
+                "char_pos_x": self.game_module + 0xF25D78,
+                "char_pos_y": self.game_module + 0xF25D7C,
+                "char_pos_z": self.game_module + 0xF25D80,
+                "char_rot_ptr": self.game_module + 0xEA2280,  # <-- ADDED FOR ROTATION
             }
             for i, patch_info in enumerate(PATCH_LOCATIONS):
                 self.addresses[f"patch_{i+1}"] = self.game_module + patch_info["offset"]
             return True
         except Exception:
-            # We fail silently here to avoid spamming errors if game isn't open while using Editor
             return False
 
     def apply_memory_patch(self, patch_type):
@@ -617,6 +655,11 @@ class DataEntryApp:
     def _camera_loop(self):
         if not self.freecam_enabled: return
         
+        # Pause camera tracking if user is not on the camera tab
+        if self.current_tab_index != 1:
+            self.root.after(TICK_RATE_MS, self._camera_loop)
+            return
+
         try:
             # 1. Mouse Look
             cx, cy = mouse.get_position()
@@ -629,7 +672,7 @@ class DataEntryApp:
                 self.target_pitch += dy * MOUSE_SENSITIVITY
                 self.target_pitch = max(-math.pi/2 + 0.01, min(math.pi/2 - 0.01, self.target_pitch))
 
-            # 2. Click Check (Log Output)
+            # 2. Left Click Check (Camera Output)
             if mouse.is_pressed('left'):
                 if not self.left_click_last_state:
                     self._log_camera_pos()
@@ -773,6 +816,43 @@ class DataEntryApp:
             self.log_text.see(tk.END)
         except Exception as e:
             self.log_text.insert(tk.END, f"Error capturing: {e}\n")
+
+    def _log_char_pos_standalone(self):
+        # We need to make sure we are hooked into memory first, 
+        # just in case the user hasn't turned the freecam on yet.
+        if not self.pm or not self.addresses:
+            if not self.calculate_addresses():
+                self.log_text.insert(tk.END, "Error: Game not found. Please ensure FFX is running.\n")
+                self.log_text.see(tk.END)
+                return
+
+        try:
+            # Position Data
+            cx = self.pm.read_float(self.addresses['char_pos_x'])
+            cy = self.pm.read_float(self.addresses['char_pos_y'])
+            cz = self.pm.read_float(self.addresses['char_pos_z'])
+
+            h_cx = self._float_to_game_hex(cx)
+            h_cy = self._float_to_game_hex(cy)
+            h_cz = self._float_to_game_hex(cz)
+
+            line1 = f"AE{h_cx} AE{h_cy} AE{h_cz} D81300  (Char Pos'n)\n"
+
+            # --- NEW: Rotation Data ---
+            rot_ptr = self.pm.read_int(self.addresses['char_rot_ptr'])
+            rot = self.pm.read_float(rot_ptr + 0x168)
+            h_rot = self._float_to_game_hex(rot * 100)
+            
+            line2 = f"AE{h_rot} AE6400 17 D89500  (Char Rot'n)\n"
+
+            self.log_text.insert(tk.END, "-"*40 + "\n")
+            self.log_text.insert(tk.END, line1)
+            self.log_text.insert(tk.END, line2)
+            self.log_text.see(tk.END)
+        except Exception as e:
+            self.log_text.insert(tk.END, f"Error capturing Char Pos/Rot: {e}\n")
+            # If it fails, wipe PM so it can try to reattach next time
+            self.pm = None 
 
     # ==========================================
     #           SHARED / EDITOR UTILS
